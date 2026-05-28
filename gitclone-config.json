@@ -1,0 +1,36 @@
+{
+  "server_mappings": {
+    "github.com": "github",
+    "gitea.skyner.cn": "gitea",
+    "gitee.com": "gitee",
+    "cnb.cool": "cnb"
+  },
+  "editors": [
+    {
+      "name": "Cursor",
+      "command": "cursor",
+      "app_path": "/Applications/Cursor.app"
+    },
+    {
+      "name": "VS Code",
+      "command": "code",
+      "app_path": "/Applications/Visual Studio Code.app"
+    },
+    {
+      "name": "IntelliJ IDEA",
+      "command": "idea",
+      "app_path": "/Applications/IntelliJ IDEA.app"
+    },
+    {
+      "name": "WebStorm",
+      "command": "webstorm",
+      "app_path": "/Applications/WebStorm.app"
+    },
+    {
+      "name": "TRAE",
+      "command": "trae",
+      "app_path": "/Applications/Trae CN.app"
+    }
+  ],
+  "base_dir": "~/Documents/Projects"
+}
