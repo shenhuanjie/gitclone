@@ -34,6 +34,243 @@ print_error() {
     echo -e "${RED}[错误]${NC} $1"
 }
 
+# ============================================
+# 代理检测与配置模块
+# ============================================
+
+# 代理配置默认值
+DEFAULT_PROXY_PORTS=(7890 7891 1080 10808)
+
+# 检测环境变量代理
+detect_env_proxy() {
+    # 优先级: ALL_PROXY > HTTP_PROXY > HTTPS_PROXY
+    if [ -n "$ALL_PROXY" ]; then
+        echo "$ALL_PROXY"
+        return 0
+    fi
+
+    if [ -n "$HTTP_PROXY" ]; then
+        echo "$HTTP_PROXY"
+        return 0
+    fi
+
+    if [ -n "$HTTPS_PROXY" ]; then
+        echo "$HTTPS_PROXY"
+        return 0
+    fi
+
+    return 1
+}
+
+# 检测常见代理端口
+detect_common_proxy_ports() {
+    local host="${1:-127.0.0.1}"
+
+    for port in "${DEFAULT_PROXY_PORTS[@]}"; do
+        if nc -z -w 1 "$host" "$port" 2>/dev/null; then
+            echo "http://$host:$port"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+# 检测 macOS 系统代理
+detect_macos_proxy() {
+    if ! command -v scutil &> /dev/null; then
+        return 1
+    fi
+
+    local proxy_info=$(scutil --proxy 2>/dev/null)
+
+    if echo "$proxy_info" | grep -q "HTTPEnable.*1"; then
+        local http_proxy=$(echo "$proxy_info" | grep -A1 "HTTPProxy" | tail -1 | awk '{print $2}')
+        local http_port=$(echo "$proxy_info" | grep -A1 "HTTPPort" | tail -1 | awk '{print $2}')
+
+        if [ -n "$http_proxy" ] && [ -n "$http_port" ]; then
+            echo "http://$http_proxy:$http_port"
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+# 获取配置的代理
+get_config_proxy() {
+    if [ ! -f "$CONFIG_FILE" ] || ! command -v python3 &> /dev/null; then
+        return 1
+    fi
+
+    python3 -c "
+import json
+try:
+    with open('$CONFIG_FILE', 'r') as f:
+        config = json.load(f)
+    proxy = config.get('proxy', {})
+    if proxy.get('enabled', True) and proxy.get('url'):
+        print(proxy['url'])
+except:
+    pass
+" 2>/dev/null
+}
+
+# 检查是否启用自动检测
+is_auto_detect_enabled() {
+    if [ ! -f "$CONFIG_FILE" ] || ! command -v python3 &> /dev/null; then
+        echo "true"
+        return
+    fi
+
+    local result=$(python3 -c "
+import json
+try:
+    with open('$CONFIG_FILE', 'r') as f:
+        config = json.load(f)
+    proxy = config.get('proxy', {})
+    print(str(proxy.get('autoDetect', True)))
+except:
+    print('true')
+" 2>/dev/null)
+
+    echo "$result"
+}
+
+# 检查代理是否启用
+is_proxy_enabled() {
+    if [ ! -f "$CONFIG_FILE" ] || ! command -v python3 &> /dev/null; then
+        echo "true"
+        return
+    fi
+
+    local result=$(python3 -c "
+import json
+try:
+    with open('$CONFIG_FILE', 'r') as f:
+        config = json.load(f)
+    proxy = config.get('proxy', {})
+    print(str(proxy.get('enabled', True)))
+except:
+    print('true')
+" 2>/dev/null)
+
+    echo "$result"
+}
+
+# 主代理检测函数（按优先级）
+detect_proxy() {
+    # 检查代理是否被禁用
+    if [ "$(is_proxy_enabled)" = "false" ]; then
+        print_info "代理已被配置禁用"
+        return 1
+    fi
+
+    # 1. 优先使用配置的代理
+    local config_proxy=$(get_config_proxy)
+    if [ -n "$config_proxy" ]; then
+        print_info "使用配置的代理: $config_proxy"
+        echo "$config_proxy"
+        return 0
+    fi
+
+    # 2. 检测是否启用自动检测
+    if [ "$(is_auto_detect_enabled)" = "false" ]; then
+        print_info "自动代理检测已禁用"
+        return 1
+    fi
+
+    # 3. 检测环境变量
+    local env_proxy=$(detect_env_proxy)
+    if [ -n "$env_proxy" ]; then
+        print_info "检测到环境变量代理: $env_proxy"
+        echo "$env_proxy"
+        return 0
+    fi
+
+    # 4. 检测常见代理端口
+    local port_proxy=$(detect_common_proxy_ports)
+    if [ -n "$port_proxy" ]; then
+        print_info "检测到常见代理端口: $port_proxy"
+        echo "$port_proxy"
+        return 0
+    fi
+
+    # 5. 检测 macOS 系统代理
+    local macos_proxy=$(detect_macos_proxy)
+    if [ -n "$macos_proxy" ]; then
+        print_info "检测到 macOS 系统代理: $macos_proxy"
+        echo "$macos_proxy"
+        return 0
+    fi
+
+    return 1
+}
+
+# 代理健康检查
+check_proxy_health() {
+    local proxy_url="$1"
+    local timeout="${2:-3}"
+
+    print_info "正在检查代理连通性: $proxy_url"
+
+    # 提取协议
+    local protocol=$(echo "$proxy_url" | sed -E 's|^(https?|socks5)://.*|\1|')
+
+    # 尝试使用 curl 进行健康检查
+    if command -v curl &> /dev/null; then
+        local curl_output=$(curl -x "$proxy_url" --connect-timeout "$timeout" --max-time "$timeout" -I -s https://www.google.com 2>&1)
+        local curl_exit_code=$?
+
+        if [ $curl_exit_code -eq 0 ]; then
+            print_success "代理连通性检查通过"
+            return 0
+        else
+            print_warning "代理连通性检查失败 (curl exit: $curl_exit_code)"
+            return 1
+        fi
+    fi
+
+    # 如果没有 curl，尝试使用 nc 测试端口
+    local proxy_host=$(echo "$proxy_url" | sed -E 's|^(https?|socks5)://([^:/]+).*|\2|')
+    local proxy_port=$(echo "$proxy_url" | sed -E 's|^(https?|socks5)://[^:]+:([0-9]+).*|\2|')
+
+    if [ -n "$proxy_host" ] && [ -n "$proxy_port" ]; then
+        if nc -z -w "$timeout" "$proxy_host" "$proxy_port" 2>/dev/null; then
+            print_success "代理端口检测通过"
+            return 0
+        else
+            print_warning "代理端口检测失败"
+            return 1
+        fi
+    fi
+
+    print_warning "无法执行代理健康检查"
+    return 1
+}
+
+# 应用代理配置到 Git
+apply_git_proxy() {
+    local proxy_url="$1"
+
+    if [ -z "$proxy_url" ]; then
+        return 1
+    fi
+
+    print_info "配置 Git 代理: $proxy_url"
+
+    git config --global http.proxy "$proxy_url"
+    git config --global https.proxy "$proxy_url"
+
+    print_success "Git 代理已配置"
+}
+
+# 清除 Git 代理配置
+clear_git_proxy() {
+    git config --global --unset http.proxy 2>/dev/null || true
+    git config --global --unset https.proxy 2>/dev/null || true
+}
+
 # 读取配置文件
 load_config() {
     if [ ! -f "$CONFIG_FILE" ]; then
@@ -1137,12 +1374,36 @@ main() {
     else
         print_info "组织目录已存在: $org_dir"
     fi
-    
+
     echo ""
     print_info "开始克隆仓库..."
     print_info "目标目录: $repo_dir"
     echo ""
-    
+
+    # ============================================
+    # 代理检测与应用
+    # ============================================
+    local detected_proxy=""
+    local proxy_applied=0
+
+    if detected_proxy=$(detect_proxy); then
+        print_info "检测到可用代理: $detected_proxy"
+        echo ""
+
+        # 执行代理健康检查
+        if check_proxy_health "$detected_proxy"; then
+            apply_git_proxy "$detected_proxy"
+            proxy_applied=1
+            print_info "代理信息: $detected_proxy"
+        else
+            print_warning "代理健康检查失败，将尝试直接连接..."
+            clear_git_proxy
+        fi
+    else
+        print_info "未检测到可用代理，将使用直接连接"
+    fi
+    echo ""
+
     # 执行 git clone（带重试机制和错误处理）
     set +e
     local max_retries=3

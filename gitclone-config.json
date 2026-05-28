@@ -32,5 +32,10 @@
       "app_path": "/Applications/Trae CN.app"
     }
   ],
-  "base_dir": "~/Documents/Projects"
+  "base_dir": "~/Documents/Projects",
+  "proxy": {
+    "enabled": true,
+    "autoDetect": true,
+    "url": ""
+  }
 }
