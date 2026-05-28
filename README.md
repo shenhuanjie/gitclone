@@ -12,6 +12,7 @@
   - `gitee.com` → `~/Documents/Projects/gitee/`
 - **多 URL 格式支持** - HTTPS / SSH / 多层组织路径
 - **网络质量检测** - 克隆前自动检测网络连通性
+- **代理支持** - 自动检测并使用系统代理（支持 Clash VPN 等）
 - **克隆后交互** - 生成项目索引、选择编辑器打开
 
 ## 安装
@@ -75,9 +76,24 @@ gitclone --refresh
     { "name": "Cursor", "command": "cursor", "app_path": "/Applications/Cursor.app" },
     { "name": "VS Code", "command": "code", "app_path": "/Applications/Visual Studio Code.app" }
   ],
-  "base_dir": "~/Documents/Projects"
+  "base_dir": "~/Documents/Projects",
+  "proxy": {
+    "enabled": true,
+    "autoDetect": true,
+    "url": ""
+  }
 }
 ```
+
+### 代理配置说明
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `enabled` | 是否启用代理 | `true` |
+| `autoDetect` | 是否自动检测代理 | `true` |
+| `url` | 自定义代理地址（优先于自动检测） | `""` |
+
+代理检测优先级：配置 URL > 环境变量 > 常见端口 > macOS 系统代理
 
 ## 目录结构
 
@@ -97,3 +113,18 @@ gitclone --refresh
 ## License
 
 MIT
+
+## CHANGELOG
+
+### [Unreleased]
+
+### [1.0.0] - 2026-05-28
+
+#### Added
+- 代理支持功能
+  - 自动检测系统代理（环境变量、常见端口、macOS 系统代理）
+  - 支持自定义代理配置
+  - 代理健康检查
+  - Git 克隆前自动应用代理配置
+- 项目目录索引生成
+- 多编辑器支持

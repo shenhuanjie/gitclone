@@ -12,6 +12,7 @@ Intelligent Git repository cloning tool - one command to clone repos + organize 
   - `gitee.com` → `~/Documents/Projects/gitee/`
 - **Multi-URL Format Support** - HTTPS / SSH / multi-level org paths
 - **Network Quality Detection** - Check connectivity before cloning
+- **Proxy Support** - Auto-detect and use system proxy (Clash VPN, etc.)
 - **Post-Clone Interaction** - Generate project index, choose editor to open
 
 ## Installation
@@ -75,9 +76,24 @@ Config file: `~/.gitclone/gitclone-config.json`
     { "name": "Cursor", "command": "cursor", "app_path": "/Applications/Cursor.app" },
     { "name": "VS Code", "command": "code", "app_path": "/Applications/Visual Studio Code.app" }
   ],
-  "base_dir": "~/Documents/Projects"
+  "base_dir": "~/Documents/Projects",
+  "proxy": {
+    "enabled": true,
+    "autoDetect": true,
+    "url": ""
+  }
 }
 ```
+
+### Proxy Configuration
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `enabled` | Enable proxy | `true` |
+| `autoDetect` | Auto-detect proxy | `true` |
+| `url` | Custom proxy URL (takes priority over auto-detect) | `""` |
+
+Proxy detection priority: Config URL > Environment vars > Common ports > macOS System Proxy
 
 ## Directory Structure
 
@@ -97,3 +113,18 @@ Config file: `~/.gitclone/gitclone-config.json`
 ## License
 
 MIT
+
+## CHANGELOG
+
+### [Unreleased]
+
+### [1.0.0] - 2026-05-28
+
+#### Added
+- Proxy support
+  - Auto-detect system proxy (env vars, common ports, macOS)
+  - Custom proxy configuration
+  - Proxy health check
+  - Auto-apply proxy before git clone
+- Project directory index generation
+- Multi-editor support
